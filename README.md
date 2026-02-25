@@ -102,19 +102,29 @@ Do **NOT** use the root user for automation.
 
 1.  Create IAM user:
 
-```{=html}
-<!-- -->
+``` bash
+aws iam create-user \
+    --user-name terraform-admin
 ```
-    IAM → Users → Create user → terraform-admin
 
-2.  Attach policy:
+2.  Attach AdminstratorAccess policy (Demo Only):
 
-```{=html}
-<!-- -->
+``` bash
+aws iam attach-user-policy \
+    --user-name terraform-admin \
+    --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
 ```
-    AdministratorAccess (demo only)
 
-3.  Configure locally:
+3. Create Access Keys (IMPORTANT)
+
+``` bash
+aws iam create-access-key \
+    --user-name terraform-admin
+```
+Once you do this, save the access key somewhere safe. Do this
+step immediately because you only get to look at it once.
+
+4. Configure locally:
 
 ``` bash
 aws configure
@@ -233,13 +243,138 @@ Check:
     curated/financial_disclosures/
     quarantine/financial_disclosures/
 
+``` bash
+aws s3 ls s3://YOUR_BUCKET/raw/financial_disclosures/
+aws s3 ls s3://YOUR_BUCKET/curated/financial_disclosures/
+aws s3 ls s3://YOUR_BUCKET/quarantine/financial_disclosures/
+```
+
+### Lambda Function
+
+You can look at the Lambda functions like this:
+
+``` bash
+aws lambda list-functions
+```
+
+or like this:
+
+``` bash
+aws lambda list-functions --query "Functions[].FunctionName"
+```
+The second option shows the output more clearly.
+
+Then, you can look at the Lambda Function configuration:
+
+``` bash
+aws lambda get-function-configuration \
+    --function-name reviews-processor
+    --query "{Runtime:Runtime,Handler:Handler,Memory:MemorySize,Timeout:Timeout}"
+```
+Here, the --query part is optional.
+
+You can also look at the code and configuration like this:
+
+``` bash
+aws lambda get-function \
+    --function-name reviews-processor
+```
+
+From the cli, you can look at the Lambda logs which live in CloudWatch:
+``` bash
+aws logs describe-log-groups \
+  --log-group-name-prefix /aws/lambda/
+```
+
+Finally, you can invoke or trigger the Lambda Function from the CLI
+to make sure it responds to a trigger or event:
+
+``` bash
+aws lambda invoke \
+  --function-name reviews-processor \
+  --payload '{"test": "hello"}' \
+  response.json
+```
+Once you invoke it, check the output in the output json file.
+
+Note: In this code, --payload is optional.
+
 ### DynamoDB
 
 Table:
 
     fin-disclosures-demo-financial_disclosures_masked
 
-You should see masked fields: - ssn_masked - email_masked - hashes
+If you want to see data quickly, use this command:
+``` bash
+aws dynamodb scan --table-name fin-disclosures-demo-financial_disclosures_masked\
+    --max-items 5
+```
+
+Yet, if you want to look at the DynamoDB table, using 'query', you have to define 
+the create an attribute values json file first like below:
+
+{
+  ":id": { "S": "D-0001" }
+}
+This json file uses the disclosure id which is the partition key.
+
+Now, run this command:
+
+``` bash
+aws dynamodb query \
+  --table-name fin-disclosures-demo-financial_disclosures_masked \
+  --key-condition-expression "disclosure_id = :id" \
+  --expression-attribute-values file://values.json
+```
+
+If you have an index like the GSI below, create a json file for it like this:
+
+{
+  ":inst": { "S": "NorthStar Community Bank" },
+  ":dt":   { "S": "2026-02-01" }
+}
+
+Now, run this command:
+
+``` bash
+aws dynamodb query \
+  --table-name fin-disclosures-demo-financial_disclosures_masked \
+  --index-name gsi_institution_date \
+  --key-condition-expression "institution_name = :inst AND transaction_date = :dt" \
+  --expression-attribute-values file://expr_values_institution_date.json
+```
+
+If you want to include the --key-condition-expression in the --expression-attribute-values, then you have to write the above command
+as follows:
+
+``` bash
+aws dynamodb query \
+  --table-name fin-disclosures-demo-financial_disclosures_masked \
+  --index-name gsi_institution_date \
+  --key-condition-expression "institution_name = :inst AND transaction_date = :dt" \
+  --expression-attribute-values '{":inst":{"S":"NorthStar Community Bank"},":dt"{"S":"2026-02-01"}}'
+```
+
+If you intend to get only one record from the DynamoDB table, use
+the GetItem command:
+
+``` bash
+aws dynamodb get-item \
+  --table-name fin-disclosures-demo-financial_disclosures_masked \
+  --key '{"disclosure_id":{"S":"D-0001"}}'
+```
+
+Also, you can include the --projection-expression option as such:
+
+``` bash
+aws dynamodb get-item \
+  --table-name fin-disclosures-demo-financial_disclosures_masked \
+  --key '{"disclosure_id":{"S":"D-0001"}}'
+  --projection-expression "disclosure_id, ssn_masked, email_masked"
+```
+
+When you run each command, you should see these masked fields: - ssn_masked - email_masked - hashes
 instead of raw PII
 
 ------------------------------------------------------------------------
