@@ -1,0 +1,4 @@
+disclosure_id,institution_name,reporting_region,transaction_date,amount_usd
+D-0001,NorthStar Community Bank,9TH,2026-02-01,12500,John Doe,123-45-6789
+D-0002,Lakes Region Financial,9TH,2026-02-03,9800,Jane Smith,987-65-4321
+D-0003,Twin Cities Commercial,9TH,2026-02-05,15000,Bob Johnson,111-22-3333

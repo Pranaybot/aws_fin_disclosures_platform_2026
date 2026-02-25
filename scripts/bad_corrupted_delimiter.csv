@@ -1,0 +1,5 @@
+disclosure_id|institution_name|reporting_region|transaction_date|amount_usd|counterparty_name|ssn
+D-0101|NorthStar Community Bank|9TH|2026-02-10|21000|Alice Walker|222-33-4444
+D-0102,Lakes Region Financial,9TH,2026-02-11,17500,Charlie King,333-44-5555
+D-0103;Twin Cities Commercial;9TH;2026-02-12;19999;Daisy Reed;444-55-6666
+D-0104|Arctic Prairie Credit Union|9TH|2026-02-13|oops_not_a_number|Evan Cole|555-66-7777

@@ -1,18 +1,18 @@
 variable "region" {
-    type = string
-    default = "us-east-1"
+  type    = string
+  default = "us-east-1"
 }
 
 variable "project" {
-    type = string
-    default = "fin-disclosures-demo"
+  type    = string
+  default = "fin-disclosures-demo"
 }
 
 variable "bucket_name" {
-    type = string
+  type = string
 }
 
 variable "pii_hash_salt" {
-    type = string
-    sensitive = true
+  type      = string
+  sensitive = true
 }
