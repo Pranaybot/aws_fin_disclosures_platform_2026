@@ -297,16 +297,7 @@ aws lambda invoke \
 ```
 Once you invoke it, check the output in the output json file.
 
-Note: In this code, --payload is optional.
-
-# 🔎 DynamoDB Access — Financial Disclosures Platform
-
-This section explains how to access masked financial disclosure data stored in DynamoDB.
-
-The platform provides **two ways** to read data:
-
-1. ✅ **REST API (Recommended — Production Access)**
-2. 🧰 **AWS CLI (Developer Debugging Only)**
+Note: In this code, --payload is optional
 
 ---
 
@@ -327,20 +318,6 @@ All sensitive information is protected.
 - hashed identifiers
 
 Raw PII is never stored in this table.
-
----
-
-# 🌐 REST API Access (Recommended)
-
-Instead of querying DynamoDB directly, applications should use the REST API.
-
-Architecture:
-
-```
-Client → API Gateway → Search Lambda → DynamoDB (Query)
-```
-
-This prevents direct database exposure and enforces secure access patterns.
 
 ---
 
@@ -424,118 +401,6 @@ Confirms API Gateway and Lambda connectivity.
 }
 ```
 
----
-
-# 🧰 Direct DynamoDB Access (CLI)
-
-Use this mainly for debugging or validation.
-
----
-
-## Quick Table Preview (Scan)
-
-```bash
-aws dynamodb scan \
-  --table-name fin-disclosures-demo-financial_disclosures_masked \
-  --max-items 5
-```
-
----
-
-## Query Using Primary Key
-
-Create file:
-
-`values.json`
-
-```json
-{
-  ":id": { "S": "D-0001" }
-}
-```
-
-Run:
-
-```bash
-aws dynamodb query \
-  --table-name fin-disclosures-demo-financial_disclosures_masked \
-  --key-condition-expression "disclosure_id = :id" \
-  --expression-attribute-values file://values.json
-```
-
----
-
-## Query Using GSI (Institution + Date)
-
-Create:
-
-`expr_values_institution_date.json`
-
-```json
-{
-  ":inst": { "S": "NorthStar Community Bank" },
-  ":dt":   { "S": "2026-02-01" }
-}
-```
-
-Run:
-
-```bash
-aws dynamodb query \
-  --table-name fin-disclosures-demo-financial_disclosures_masked \
-  --index-name gsi_institution_date \
-  --key-condition-expression "institution_name = :inst AND transaction_date = :dt" \
-  --expression-attribute-values file://expr_values_institution_date.json
-```
-
----
-
-## Inline Expression Attribute Values (Alternative)
-
-```bash
-aws dynamodb query \
-  --table-name fin-disclosures-demo-financial_disclosures_masked \
-  --index-name gsi_institution_date \
-  --key-condition-expression "institution_name = :inst AND transaction_date = :dt" \
-  --expression-attribute-values '{":inst":{"S":"NorthStar Community Bank"},":dt":{"S":"2026-02-01"}}'
-```
-
----
-
-## Get a Single Record (GetItem)
-
-```bash
-aws dynamodb get-item \
-  --table-name fin-disclosures-demo-financial_disclosures_masked \
-  --key '{"disclosure_id":{"S":"D-0001"}}'
-```
-
----
-
-## Retrieve Only Selected Fields (Projection Expression)
-
-```bash
-aws dynamodb get-item \
-  --table-name fin-disclosures-demo-financial_disclosures_masked \
-  --key '{"disclosure_id":{"S":"D-0001"}}' \
-  --projection-expression "disclosure_id, ssn_masked, email_masked"
-```
-
----
-
-# 🔐 Data Protection Model
-
-All access paths return **masked data only**.
-
-| Field Type | Result |
-|---|---|
-| SSN | Masked |
-| Email | Masked |
-| Identifiers | Hashed |
-| Raw PII | ❌ Never returned |
-
-Masking occurs during ingestion before data reaches DynamoDB.
-
 ------------------------------------------------------------------------
 
 ## Tear Down (Stop All Costs)
@@ -594,7 +459,6 @@ After `terraform destroy`, **no running resources remain**.
 
 You can later add:
 
--   API Gateway REST APIs
 -   Athena queries over curated data
 -   Glue Data Catalog
 -   Scheduled batch ingestion
