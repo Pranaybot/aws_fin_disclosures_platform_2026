@@ -307,23 +307,38 @@ Note: In this code, --payload is optional
 fin-disclosures-demo-financial_disclosures_masked
 ```
 
-This is the **serving-layer table** containing masked disclosure records.
 
-All sensitive information is protected.
+This is the **serving-layer DynamoDB table** that contains **masked disclosure records** only.
 
-### Returned fields include:
+- Raw PII is never stored in this table.
+- Masked / derived fields are safe to return via the API.
 
+Typical returned fields include:
 - `ssn_masked`
 - `email_masked`
-- hashed identifiers
-
-Raw PII is never stored in this table.
+- hashed identifiers (ex: `hash_id`)
 
 ---
 
-## Get API Base URL
+## 🧭 Indexes (GSIs) Used by the API
 
-After Terraform deployment:
+Your API is designed around these DynamoDB GSIs:
+
+### 1) Institution + Date
+**GSI name:** `gsi_institution_date`  
+- **Partition key (HASH):** `institution_name`
+- **Sort key (RANGE):** `transaction_date`
+
+### 2) Region + Date
+**GSI name:** `gsi_region_date`  
+- **Partition key (HASH):** `reporting_region`
+- **Sort key (RANGE):** `transaction_date`
+
+---
+
+## 🌐 Get API Base URL
+
+After Terraform deployment, run:
 
 ```bash
 terraform output search_api_base_url
@@ -332,7 +347,7 @@ terraform output search_api_base_url
 Example:
 
 ```
-https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod
+https://abc123xyz.execute-api.us-east-2.amazonaws.com/prod
 ```
 
 Save it:
@@ -343,6 +358,39 @@ BASE_URL=<your-api-url>
 
 ---
 
+✅ GET / (Ordered “First N” Results)
+
+Your updated search.py makes GET / return N results in a consistent order using the institution GSI, sorted by transaction_date.
+
+Required query parameter
+
+institution (mapped to DynamoDB institution_name)
+
+
+Optional query parameter
+
+date (mapped to DynamoDB transaction_date)
+
+limit (how many items to return)
+
+
+Return the first 10 items (sorted by date) for an institution:
+
+```bash
+curl "$BASE_URL/?institution=NorthStar%20Community%20Bank&limit=10"
+```
+
+Return up to 25 items for that institution on an exact date:
+
+```bash
+curl "$BASE_URL/?institution=NorthStar%20Community%20Bank&date=2026-02-01&limit=25"
+```
+
+Note: Limit defaults to 25 in the Lambda if not provided.
+
+
+🔎 Search Endpoint Behavior (Query via GSIs)
+
 ## 🔎 Search by Institution + Date
 
 Uses DynamoDB GSI:
@@ -351,11 +399,15 @@ Uses DynamoDB GSI:
 gsi_institution_date
 ```
 
+Institution only:
 ```bash
-curl "$BASE_URL/search?institution_name=NorthStar%20Community%20Bank&transaction_date=2026-02-01"
+curl "$BASE_URL/search?institution=NorthStar%20Community%20Bank"
 ```
 
-Internally this performs a DynamoDB **Query** (not Scan).
+Institution + date:
+```bash
+curl "$BASE_URL/search?institution=NorthStar%20Community%20Bank&date=2026-02-01"
+```
 
 ---
 
@@ -367,8 +419,22 @@ Uses DynamoDB index:
 gsi_region_date
 ```
 
+Region only:
 ```bash
-curl "$BASE_URL/search?reporting_region=9TH&transaction_date=2026-02-01"
+curl "$BASE_URL/search?region=9TH"
+```
+
+Region + date:
+```bash
+curl "$BASE_URL/search?region=9TH&date=2026-02-01"
+```
+
+---
+
+🔤 Keyword Search (Scan using contains)
+
+```bash
+curl "$BASE_URL/search?contains=fraud"
 ```
 
 ---
