@@ -21,3 +21,7 @@ output "curated_prefix" {
 output "quarantine_prefix" {
   value = "quarantine/financial_disclosures/"
 }
+
+output "search_api_base_url" {
+  value = aws_apigatewayv2_stage.search_prod.invoke_url
+}

@@ -144,6 +144,19 @@ resource "aws_iam_role_policy" "lambda_policy" {
           aws_dynamodb_table.disclosures.arn
         ]
       },
+      # Read from DyanmoDB (search)
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          aws_dynamodb_table.disclosures.arn,
+          "${aws_dynamodb_table.disclosures.arn}/index/*"
+        ]
+      },
       # CloudWatch Logs
       {
         Effect = "Allow"
@@ -163,7 +176,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
 # -------------------------
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_dir  = "${path.module}/../lambda"
+  source_file  = "${path.module}/../lambda/ingest.py"
   output_path = "${path.module}/build/ingest.zip"
 }
 
@@ -210,4 +223,82 @@ resource "aws_s3_bucket_notification" "notif" {
   }
 
   depends_on = [aws_lambda_permission.allow_s3]
+}
+
+# -------------------------
+# Package the search Lambda from lambda/search.py
+# -------------------------
+data "archive_file" "search_lambda_zip" {
+  type = "zip"
+  source_file = "${path.module}/../lambda/search.py"
+  output_path = "${path.module}/build/search.zip"
+}
+
+# -------------------------
+# Search Lambda (invoked by API Gateway)
+# -------------------------
+resource "aws_lambda_function" "search" {
+  function_name = "${var.project}-financial_disclosures_search"
+  role = aws_iam_role.lambda_role.arn
+  handler = "search.lambda_handler"
+  runtime = "python3.12"
+
+  filename = data.archive_file.search_lambda_zip.output_path
+  source_code_hash = data.archive_file.search_lambda_zip.output_base64sha256
+
+  timeout = 30
+  memory_size = 256
+
+  environment {
+    variables = {
+      DDB_TABLE_NAME = aws_dynamodb_table.disclosures.name
+
+      # Your code can choose index based on query params
+      GSI_INSTITUTION_DATE = "gsi_institution_date"
+      GSI_REGION_DATE = "gsi_region_date"
+    }
+  }
+}
+
+# -------------------------
+# API Gateway HTTP API (REST-ish) for search
+# -------------------------
+resource "aws_apigatewayv2_api" "search_api" {
+  name = "${var.project}-search-api"
+  protocol_type = "HTTP"
+
+  cors_configurations {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "OPTIONS"]
+    allow_headers = ["content-type", "authorization"]
+  }
+}
+
+resource "aws_apigatewayv2_stage" "search_prod" {
+  api_id = aws_apigatewayv2_api.search_api.id
+  name = "prod"
+  auto_deploy = true
+}
+
+resource "aws_apigatewayv2_integration" "search_lambda" {
+  api_id                 = aws_apigatewayv2_api.search_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.search.invoke_arn
+  payload_format_version = "2.0"
+}
+
+# Route: GET /search
+resource "aws_apigatewayv2_route" "search_route" {
+  api_id = aws_apigatewayv2_api.search_api.id
+  route_key = "GET /search"
+  target = "integrations/${aws_apigatewayv2_integration.search_lambda.id}"
+}
+
+# Allow API Gateway to invoke search Lambda
+resource "aws_lambda_permission" "allow_apigw_invoke_search" {
+  statement_id = "AllowExecutionFromAPIGatewaySearch"
+  action = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.search.function_name
+  principal = "apigateway.amazonaws.com"
+  source_arn = "${aws_apigatewayv2_api.search_api.execution_arn}/*/*"
 }
