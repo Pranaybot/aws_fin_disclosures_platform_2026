@@ -267,7 +267,7 @@ resource "aws_apigatewayv2_api" "search_api" {
   name = "${var.project}-search-api"
   protocol_type = "HTTP"
 
-  cors_configurations {
+  cors_configuration {
     allow_origins = ["*"]
     allow_methods = ["GET", "OPTIONS"]
     allow_headers = ["content-type", "authorization"]

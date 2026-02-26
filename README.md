@@ -199,6 +199,7 @@ Terraform will create:
 -   S3 bucket
 -   DynamoDB table
 -   Lambda function
+-   API Gateway
 -   IAM role
 -   S3 event trigger
 
