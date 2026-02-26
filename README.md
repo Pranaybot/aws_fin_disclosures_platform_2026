@@ -299,45 +299,188 @@ Once you invoke it, check the output in the output json file.
 
 Note: In this code, --payload is optional.
 
-### DynamoDB
+# 🔎 DynamoDB Access — Financial Disclosures Platform
 
-Table:
+This section explains how to access masked financial disclosure data stored in DynamoDB.
 
-    fin-disclosures-demo-financial_disclosures_masked
+The platform provides **two ways** to read data:
 
-If you want to see data quickly, use this command:
-``` bash
-aws dynamodb scan --table-name fin-disclosures-demo-financial_disclosures_masked\
-    --max-items 5
+1. ✅ **REST API (Recommended — Production Access)**
+2. 🧰 **AWS CLI (Developer Debugging Only)**
+
+---
+
+# 📦 DynamoDB Table
+
+```
+fin-disclosures-demo-financial_disclosures_masked
 ```
 
-Yet, if you want to look at the DynamoDB table, using 'query', you have to define 
-the create an attribute values json file first like below:
+This is the **serving-layer table** containing masked disclosure records.
 
+All sensitive information is protected.
+
+### Returned fields include:
+
+- `ssn_masked`
+- `email_masked`
+- hashed identifiers
+
+Raw PII is never stored in this table.
+
+---
+
+# 🌐 REST API Access (Recommended)
+
+Instead of querying DynamoDB directly, applications should use the REST API.
+
+Architecture:
+
+```
+Client → API Gateway → Search Lambda → DynamoDB (Query)
+```
+
+This prevents direct database exposure and enforces secure access patterns.
+
+---
+
+## Get API Base URL
+
+After Terraform deployment:
+
+```bash
+terraform output search_api_base_url
+```
+
+Example:
+
+```
+https://abc123xyz.execute-api.us-east-1.amazonaws.com/prod
+```
+
+Save it:
+
+```bash
+BASE_URL=<your-api-url>
+```
+
+---
+
+## 🔎 Search by Institution + Date
+
+Uses DynamoDB GSI:
+
+```
+gsi_institution_date
+```
+
+```bash
+curl "$BASE_URL/search?institution_name=NorthStar%20Community%20Bank&transaction_date=2026-02-01"
+```
+
+Internally this performs a DynamoDB **Query** (not Scan).
+
+---
+
+## 🌎 Search by Region + Date
+
+Uses DynamoDB index:
+
+```
+gsi_region_date
+```
+
+```bash
+curl "$BASE_URL/search?reporting_region=9TH&transaction_date=2026-02-01"
+```
+
+---
+
+## 🧪 Health Check
+
+```bash
+curl "$BASE_URL/"
+```
+
+Confirms API Gateway and Lambda connectivity.
+
+---
+
+## ✅ Example API Response
+
+```json
+{
+  "count": 1,
+  "items": [
+    {
+      "disclosure_id": "D-0001",
+      "institution_name": "NorthStar Community Bank",
+      "transaction_date": "2026-02-01",
+      "ssn_masked": "***-**-4321",
+      "email_masked": "j***@example.com",
+      "hash_id": "9f21ab..."
+    }
+  ]
+}
+```
+
+---
+
+# 🧰 Direct DynamoDB Access (CLI)
+
+Use this mainly for debugging or validation.
+
+---
+
+## Quick Table Preview (Scan)
+
+```bash
+aws dynamodb scan \
+  --table-name fin-disclosures-demo-financial_disclosures_masked \
+  --max-items 5
+```
+
+---
+
+## Query Using Primary Key
+
+Create file:
+
+`values.json`
+
+```json
 {
   ":id": { "S": "D-0001" }
 }
-This json file uses the disclosure id which is the partition key.
+```
 
-Now, run this command:
+Run:
 
-``` bash
+```bash
 aws dynamodb query \
   --table-name fin-disclosures-demo-financial_disclosures_masked \
   --key-condition-expression "disclosure_id = :id" \
   --expression-attribute-values file://values.json
 ```
 
-If you have an index like the GSI below, create a json file for it like this:
+---
 
+## Query Using GSI (Institution + Date)
+
+Create:
+
+`expr_values_institution_date.json`
+
+```json
 {
   ":inst": { "S": "NorthStar Community Bank" },
   ":dt":   { "S": "2026-02-01" }
 }
+```
 
-Now, run this command:
+Run:
 
-``` bash
+```bash
 aws dynamodb query \
   --table-name fin-disclosures-demo-financial_disclosures_masked \
   --index-name gsi_institution_date \
@@ -345,37 +488,53 @@ aws dynamodb query \
   --expression-attribute-values file://expr_values_institution_date.json
 ```
 
-If you want to include the --key-condition-expression in the --expression-attribute-values, then you have to write the above command
-as follows:
+---
 
-``` bash
+## Inline Expression Attribute Values (Alternative)
+
+```bash
 aws dynamodb query \
   --table-name fin-disclosures-demo-financial_disclosures_masked \
   --index-name gsi_institution_date \
   --key-condition-expression "institution_name = :inst AND transaction_date = :dt" \
-  --expression-attribute-values '{":inst":{"S":"NorthStar Community Bank"},":dt"{"S":"2026-02-01"}}'
+  --expression-attribute-values '{":inst":{"S":"NorthStar Community Bank"},":dt":{"S":"2026-02-01"}}'
 ```
 
-If you intend to get only one record from the DynamoDB table, use
-the GetItem command:
+---
 
-``` bash
+## Get a Single Record (GetItem)
+
+```bash
 aws dynamodb get-item \
   --table-name fin-disclosures-demo-financial_disclosures_masked \
   --key '{"disclosure_id":{"S":"D-0001"}}'
 ```
 
-Also, you can include the --projection-expression option as such:
+---
 
-``` bash
+## Retrieve Only Selected Fields (Projection Expression)
+
+```bash
 aws dynamodb get-item \
   --table-name fin-disclosures-demo-financial_disclosures_masked \
-  --key '{"disclosure_id":{"S":"D-0001"}}'
+  --key '{"disclosure_id":{"S":"D-0001"}}' \
   --projection-expression "disclosure_id, ssn_masked, email_masked"
 ```
 
-When you run each command, you should see these masked fields: - ssn_masked - email_masked - hashes
-instead of raw PII
+---
+
+# 🔐 Data Protection Model
+
+All access paths return **masked data only**.
+
+| Field Type | Result |
+|---|---|
+| SSN | Masked |
+| Email | Masked |
+| Identifiers | Hashed |
+| Raw PII | ❌ Never returned |
+
+Masking occurs during ingestion before data reaches DynamoDB.
 
 ------------------------------------------------------------------------
 

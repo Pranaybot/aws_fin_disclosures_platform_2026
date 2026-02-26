@@ -15,6 +15,22 @@ def _resp(status, body):
   }
 
 def lambda_handler(event, context):
+  # ------------------------------------------------------------
+  # Support GET /
+  # Your API Gateway route_key = "GET /" points here, so we
+  # return a simple health response when the path is "/".
+  # ------------------------------------------------------------
+  raw_path = event.get("rawPath") or event.get("path") or ""
+  request_ctx = event.get("requestContext") or {}
+  http_ctx = request_ctx.get("http") or {}
+  method = http_ctx.get("method") or event.get("httpMethod") or ""
+
+  if method == "GET" and raw_path == "/":
+    return _resp(200, {"ok": True, "service": "search-api"})
+
+  # ------------------------------------------------------------
+  # Existing search behavior
+  # ------------------------------------------------------------
   qs = (event.get("queryStringParameters") or {})
   institution = qs.get("institution")
   tx_date = qs.get("date")

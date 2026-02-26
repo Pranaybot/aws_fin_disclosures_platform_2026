@@ -294,6 +294,13 @@ resource "aws_apigatewayv2_route" "search_route" {
   target = "integrations/${aws_apigatewayv2_integration.search_lambda.id}"
 }
 
+# Optional: simple health route GET /
+resource "aws_apigatewayv2_route" "root_route" {
+  api_id    = aws_apigatewayv2_api.search_api.id
+  route_key = "GET /"
+  target    = "integrations/${aws_apigatewayv2_integration.search_lambda.id}"
+}
+
 # Allow API Gateway to invoke search Lambda
 resource "aws_lambda_permission" "allow_apigw_invoke_search" {
   statement_id = "AllowExecutionFromAPIGatewaySearch"
